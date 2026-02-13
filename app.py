@@ -163,4 +163,5 @@ def users_show(user_id):
 
 
 # Running app in debug mode (for auto-refresh)
-app.run(debug=True)
+if __name__ == '__main__':
+    app.run()
