@@ -5,10 +5,14 @@ import jwt
 import bcrypt
 import os
 from auth_middleware import token_required
+from agents import agents_blueprint
+
+
 
 load_dotenv()
 
 app = Flask(__name__)
+app.register_blueprint(agents_blueprint)
 
 
 def get_db_connection():
@@ -64,22 +68,24 @@ def sign_up():
 
         # Through the connection, run a SQL command to find existing user in the db
         cursor.execute(
-            "SELECT * FROM users WHERE username = %s;", (new_user_data["username"],)
-        )
+            "SELECT * FROM users WHERE email = %s;", 
+            (new_user_data["email"],)
+            )
+
         # Then fetch the user
         existing_user = cursor.fetchone()
         # Close the connection if there is a user and return message specifying existing user
         if existing_user:
             cursor.close()
-            return jsonify({"err": "Username already taken"}), 400
+            return jsonify({"err": "Email already taken"}), 400
         # Hash the password
         hashed_password = bcrypt.hashpw(
             bytes(new_user_data["password"], "utf-8"), bcrypt.gensalt()
         )
         # With no existing user, we can add the user to db and return the user object
         cursor.execute(
-            "INSERT INTO users (username, password) VALUES (%s, %s) RETURNING id, username",
-            (new_user_data["username"], hashed_password.decode("utf-8")),
+            "INSERT INTO users (email, password_hash) VALUES (%s, %s) RETURNING id, email",
+            (new_user_data["email"], hashed_password.decode("utf-8")),
         )
         # Grab the user object from db, then commit (save to db) then close connection with the DB
         created_user = cursor.fetchone()
@@ -87,7 +93,7 @@ def sign_up():
         connection.close()
 
         # Construct the payload
-        payload = {"username": created_user["username"], "id": created_user["id"]}
+        payload = {"email": created_user["email"], "id": created_user["id"]}
         # Create the token, attaching the payload
         token = jwt.encode({"payload": payload}, os.getenv("JWT_SECRET"))
         # Send the token instead of the user
@@ -106,7 +112,7 @@ def sign_in():
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         # Checking if user does exist in the db
         cursor.execute(
-            "SELECT * FROM users WHERE username = %s;", (sign_in_form_data["username"],)
+            "SELECT * FROM users WHERE email = %s;", (sign_in_form_data["email"],)
         )
         existing_user = cursor.fetchone()
         # if no existing user, return appropriate message
@@ -115,13 +121,14 @@ def sign_in():
         # else check the password against the hashed version of the password
         password_is_valid = bcrypt.checkpw(
             bytes(sign_in_form_data["password"], "utf-8"),
-            bytes(existing_user["password"], "utf-8"),
+            bytes(existing_user["password_hash"], "utf-8")
+
         )
 
         if not password_is_valid:
             return jsonify({"err": "Invalid credentials."}), 401
         # Construct the payload
-        payload = {"username": existing_user["username"], "id": existing_user["id"]}
+        payload = {"email": existing_user["email"], "id": existing_user["id"]}
         # Create the token, attaching the payload
         token = jwt.encode({"payload": payload}, os.getenv("JWT_SECRET"))
         # Send the token instead of the user
@@ -138,7 +145,7 @@ def sign_in():
 def users_index():
     connection = get_db_connection()
     cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cursor.execute("SELECT id, username FROM users;")
+    cursor.execute("SELECT id, email FROM users;")
     users = cursor.fetchall()
     connection.close()
     return jsonify(users), 200
@@ -154,7 +161,7 @@ def users_show(user_id):
 
     connection = get_db_connection()
     cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cursor.execute("SELECT id, username FROM users WHERE id = %s;", (user_id))
+    cursor.execute("SELECT id, email FROM users WHERE id = %s;", (user_id))
     user = cursor.fetchone()
     connection.close()
     if user is None:
