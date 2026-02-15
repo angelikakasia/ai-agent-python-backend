@@ -8,3 +8,4 @@ pipenv install flask flask-cors python-dotenv psycopg2-binary pyjwt bcrypt
 
 python3 app.py
 pipenv install gunicorn
+pipenv install flask-cors
