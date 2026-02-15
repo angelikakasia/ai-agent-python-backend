@@ -6,7 +6,6 @@ name = "pypi"
 [packages]
 flask = "*"
 psycopg2-binary = "*"
-
 flask-dotenv = "*"
 pyjwt = "*"
 python-dotenv = "*"
