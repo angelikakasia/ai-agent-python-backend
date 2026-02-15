@@ -4,6 +4,8 @@ import psycopg2, psycopg2.extras
 import jwt
 import bcrypt
 import os
+from db_helpers import get_db_connection
+from flask_cors import CORS
 from auth_middleware import token_required
 from agents import agents_blueprint
 
@@ -13,20 +15,21 @@ load_dotenv()
 
 app = Flask(__name__)
 app.register_blueprint(agents_blueprint)
+CORS(app)
 
 
-def get_db_connection():
-    connection = psycopg2.connect(
-        host="localhost",
-        database="flask_auth_db",
-        user=os.getenv(
-            "POSTGRES_USERNAME"
-        ),  # may not be necessary depending on your postgres setup
-        password=os.getenv(
-            "POSTGRES_PASSWORD"
-        ),  # may not be necessary depending on your postgres setup
-    )
-    return connection
+# def get_db_connection():
+#     connection = psycopg2.connect(
+#         host="localhost",
+#         database="flask_auth_db",
+#         user=os.getenv(
+#             "POSTGRES_USERNAME"
+#         ),  # may not be necessary depending on your postgres setup
+#         password=os.getenv(
+#             "POSTGRES_PASSWORD"
+#         ),  # may not be necessary depending on your postgres setup
+#     )
+#     return connection
 
 
 @app.route("/")
@@ -209,6 +212,9 @@ def users_show(user_id):
         return jsonify({"err": "User not found"}), 404
     return jsonify(user), 200
 
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({"error": "Route not found"}), 404
 
 # Running app in debug mode (for auto-refresh)
 if __name__ == '__main__':

@@ -49,3 +49,7 @@ CREATE TABLE permissions (
     scope TEXT,
     justification TEXT
 );
+
+ALTER TABLE permissions
+ADD CONSTRAINT unique_agent_action
+UNIQUE (agent_id, action_id);

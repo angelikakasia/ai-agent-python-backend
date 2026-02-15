@@ -12,6 +12,9 @@ agents_blueprint = Blueprint("agents_blueprint", __name__)
 def create_agent():
     try:
         data = request.get_json()
+        if not data or "name" not in data:
+            return jsonify({"error": "Name is required"}), 400
+
 
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -69,16 +72,20 @@ def agents_show(agent_id):
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         # Get agent
-        cursor.execute("SELECT * FROM agents WHERE id = %s;", (agent_id,))
+        # Get agent and verify ownership in one query
+        cursor.execute("""
+            SELECT * FROM agents 
+            WHERE id = %s AND user_id = %s;
+        """, (agent_id, g.user["id"]))
+
         agent = cursor.fetchone()
 
         if not agent:
             connection.close()
-            return jsonify({"error": "Agent not found"}), 404
+            return jsonify({"error": "Agent not found or unauthorized"}), 404
 
-        if agent["user_id"] != g.user["id"]:
-            connection.close()
-            return jsonify({"error": "Unauthorized"}), 401
+
+        
 
         # Get assigned actions
         cursor.execute("""
@@ -91,6 +98,16 @@ def agents_show(agent_id):
         actions = cursor.fetchall()
 
         # Impact summary
+        cursor.execute("""
+            SELECT a.impact_level, COUNT(*) as count
+            FROM permissions p
+            JOIN actions a ON p.action_id = a.id
+            WHERE p.agent_id = %s
+            GROUP BY a.impact_level;
+        """, (agent_id,))
+
+        impact_rows = cursor.fetchall()
+
         impact_summary = {
             "low": 0,
             "medium": 0,
@@ -98,8 +115,9 @@ def agents_show(agent_id):
             "irreversible": 0
         }
 
-        for action in actions:
-            impact_summary[action["impact_level"]] += 1
+        for row in impact_rows:
+            impact_summary[row["impact_level"]] = row["count"]
+
 
         connection.close()
 
@@ -137,6 +155,9 @@ def actions_index():
 def update_agent(agent_id):
     try:
         data = request.get_json()
+        if not data or "name" not in data:
+            return jsonify({"error": "Name is required"}), 400
+
 
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -200,6 +221,9 @@ def delete_agent(agent_id):
 def assign_action(agent_id):
     try:
         data = request.get_json()
+        if not data or "action_id" not in data:
+            return jsonify({"error": "action_id is required"}), 400
+
 
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -280,17 +304,17 @@ def remove_action(agent_id, action_id):
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         # 1 Check agent exists
-        cursor.execute("SELECT * FROM agents WHERE id = %s;", (agent_id,))
+        cursor.execute("""
+            SELECT * FROM agents
+            WHERE id = %s AND user_id = %s;
+        """, (agent_id, g.user["id"]))
+
         agent = cursor.fetchone()
 
         if not agent:
             connection.close()
-            return jsonify({"error": "Agent not found"}), 404
+            return jsonify({"error": "Agent not found or unauthorized"}), 404
 
-        # 2 Check ownership
-        if agent["user_id"] != g.user["id"]:
-            connection.close()
-            return jsonify({"error": "Unauthorized"}), 401
 
         # 3 Delete permission
         cursor.execute("""
@@ -306,9 +330,80 @@ def remove_action(agent_id, action_id):
             return jsonify({"error": "Permission not found"}), 404
 
         connection.commit()
+        # Recalculate impact summary
+        cursor.execute("""
+            SELECT a.impact_level, COUNT(*) as count
+            FROM permissions p
+            JOIN actions a ON p.action_id = a.id
+            WHERE p.agent_id = %s
+            GROUP BY a.impact_level;
+        """, (agent_id,))
+
+        impact_rows = cursor.fetchall()
+
+        impact_summary = {
+            "low": 0,
+            "medium": 0,
+            "high": 0,
+            "irreversible": 0
+        }
+
+        for row in impact_rows:
+            impact_summary[row["impact_level"]] = row["count"]
+
+        connection.close()
+        return jsonify({
+            "message": "Action removed",
+            "impact_summary": impact_summary
+        }), 200
+
+
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
+    
+@agents_blueprint.route("/agents/<agent_id>/impact", methods=["GET"])
+@token_required
+def agent_impact(agent_id):
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Verify ownership
+        cursor.execute("""
+            SELECT * FROM agents
+            WHERE id = %s AND user_id = %s;
+        """, (agent_id, g.user["id"]))
+
+        agent = cursor.fetchone()
+
+        if not agent:
+            connection.close()
+            return jsonify({"error": "Agent not found or unauthorized"}), 404
+
+        # Aggregate impact
+        cursor.execute("""
+            SELECT a.impact_level, COUNT(*) as count
+            FROM permissions p
+            JOIN actions a ON p.action_id = a.id
+            WHERE p.agent_id = %s
+            GROUP BY a.impact_level;
+        """, (agent_id,))
+
+        rows = cursor.fetchall()
+
+        impact_summary = {
+            "low": 0,
+            "medium": 0,
+            "high": 0,
+            "irreversible": 0
+        }
+
+        for row in rows:
+            impact_summary[row["impact_level"]] = row["count"]
+
         connection.close()
 
-        return jsonify(deleted), 200
+        return jsonify(impact_summary), 200
 
     except Exception as error:
         return jsonify({"error": str(error)}), 500
