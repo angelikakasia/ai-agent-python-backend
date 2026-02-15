@@ -55,38 +55,19 @@ def agents_index():
 
     except Exception as error:
         return jsonify({"error": str(error)}), 500
-#show one agent
-@agents_blueprint.route('/agents', methods=['GET'])
+
+# show one agent
+@agents_blueprint.route('/agents/<agent_id>', methods=['GET'])
 @token_required
-def agents_index():
+def agents_show(agent_id):
     try:
-        connection = get_db_connection()
-        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
-        cursor.execute("""
-            SELECT * FROM agents
-            WHERE user_id = %s;
-        """, (g.user["id"],))
-
-        agents = cursor.fetchall()
-        connection.close()
-
-        return jsonify(agents), 200
-
-    except Exception as error:
-        return jsonify({"error": str(error)}), 500
-
-#update the agent
-@agents_blueprint.route('/agents/<agent_id>', methods=['PUT'])
-@token_required
-def update_agent(agent_id):
-    try:
-        data = request.get_json()
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         cursor.execute("SELECT * FROM agents WHERE id = %s;", (agent_id,))
         agent = cursor.fetchone()
+
+        connection.close()
 
         if not agent:
             return jsonify({"error": "Agent not found"}), 404
@@ -94,21 +75,11 @@ def update_agent(agent_id):
         if agent["user_id"] != g.user["id"]:
             return jsonify({"error": "Unauthorized"}), 401
 
-        cursor.execute("""
-            UPDATE agents
-            SET name = %s, description = %s
-            WHERE id = %s
-            RETURNING *;
-        """, (data["name"], data.get("description"), agent_id))
-
-        updated_agent = cursor.fetchone()
-        connection.commit()
-        connection.close()
-
-        return jsonify(updated_agent), 200
+        return jsonify(agent), 200
 
     except Exception as error:
         return jsonify({"error": str(error)}), 500
+
 #delete agent
 @agents_blueprint.route('/agents/<agent_id>', methods=['DELETE'])
 @token_required

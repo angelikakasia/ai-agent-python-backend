@@ -102,41 +102,82 @@ def sign_up():
         return jsonify({"err": str(err)}), 401
 
 
-# POST /auth/sign-in
+#POST AUTH/SIGN-IN
 @app.route("/auth/sign-in", methods=["POST"])
 def sign_in():
+    connection = None
     try:
-        # Grabbing the form data/body of req
         sign_in_form_data = request.get_json()
+
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        # Checking if user does exist in the db
+
         cursor.execute(
-            "SELECT * FROM users WHERE email = %s;", (sign_in_form_data["email"],)
+            "SELECT * FROM users WHERE email = %s;",
+            (sign_in_form_data["email"],)
         )
+
         existing_user = cursor.fetchone()
-        # if no existing user, return appropriate message
+
         if existing_user is None:
             return jsonify({"err": "Invalid credentials."}), 401
-        # else check the password against the hashed version of the password
-        password_is_valid = bcrypt.checkpw(
-            bytes(sign_in_form_data["password"], "utf-8"),
-            bytes(existing_user["password_hash"], "utf-8")
 
+        password_is_valid = bcrypt.checkpw(
+            sign_in_form_data["password"].encode("utf-8"),
+            existing_user["password_hash"].encode("utf-8")
         )
 
         if not password_is_valid:
             return jsonify({"err": "Invalid credentials."}), 401
-        # Construct the payload
+
         payload = {"email": existing_user["email"], "id": existing_user["id"]}
-        # Create the token, attaching the payload
-        token = jwt.encode({"payload": payload}, os.getenv("JWT_SECRET"))
-        # Send the token instead of the user
+        token = jwt.encode({"payload": payload}, os.getenv("JWT_SECRET"), algorithm="HS256")
+
         return jsonify({"token": token}), 200
+
     except Exception as err:
-        return jsonify({"err": "Invalid credentials."}), 401
+        return jsonify({"err": str(err)}), 500
+
     finally:
-        connection.close()
+        if connection:
+            connection.close()
+
+
+# POST /auth/sign-in
+# @app.route("/auth/sign-in", methods=["POST"])
+# def sign_in():
+#     try:
+#         # Grabbing the form data/body of req
+#         sign_in_form_data = request.get_json()
+#         connection = get_db_connection()
+#         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+#         # Checking if user does exist in the db
+#         cursor.execute(
+#             "SELECT * FROM users WHERE email = %s;", (sign_in_form_data["email"],)
+#         )
+#         existing_user = cursor.fetchone()
+#         # if no existing user, return appropriate message
+#         if existing_user is None:
+#             return jsonify({"err": "Invalid credentials."}), 401
+#         # else check the password against the hashed version of the password
+#         password_is_valid = bcrypt.checkpw(
+#             bytes(sign_in_form_data["password"], "utf-8"),
+#             bytes(existing_user["password_hash"], "utf-8")
+
+#         )
+
+#         if not password_is_valid:
+#             return jsonify({"err": "Invalid credentials."}), 401
+#         # Construct the payload
+#         payload = {"email": existing_user["email"], "id": existing_user["id"]}
+#         # Create the token, attaching the payload
+#         token = jwt.encode({"payload": payload}, os.getenv("JWT_SECRET"))
+#         # Send the token instead of the user
+#         return jsonify({"token": token}), 200
+#     except Exception as err:
+#         return jsonify({"err": "Invalid credentials."}), 401
+#     finally:
+#         connection.close()
 
 
 # Fetching all users, if authenticated
