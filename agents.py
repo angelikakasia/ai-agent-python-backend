@@ -112,6 +112,22 @@ def agents_show(agent_id):
     except Exception as error:
         return jsonify({"error": str(error)}), 500
 
+# GET all available actions
+@agents_blueprint.route('/actions', methods=['GET'])
+@token_required
+def actions_index():
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        cursor.execute("SELECT * FROM actions;")
+        actions = cursor.fetchall()
+
+        connection.close()
+        return jsonify(actions), 200
+
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
 
 
 
@@ -178,8 +194,6 @@ def delete_agent(agent_id):
     except Exception as error:
         return jsonify({"error": str(error)}), 500
 
-
-
 # ASSIGN ACTION TO AGENT
 @agents_blueprint.route("/agents/<agent_id>/actions", methods=["POST"])
 @token_required
@@ -190,7 +204,7 @@ def assign_action(agent_id):
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-        # verify agent ownership
+        # 1 Verify agent exists and belongs to logged-in user
         cursor.execute("""
             SELECT * FROM agents
             WHERE id = %s AND user_id = %s;
@@ -199,19 +213,58 @@ def assign_action(agent_id):
         agent = cursor.fetchone()
 
         if not agent:
+            connection.close()
             return jsonify({"error": "Agent not found or unauthorized"}), 404
 
+        # 2 Verify action exists
+        cursor.execute("""
+            SELECT * FROM actions
+            WHERE id = %s;
+        """, (data["action_id"],))
+
+        action = cursor.fetchone()
+
+        if not action:
+            connection.close()
+            return jsonify({"error": "Action not found"}), 404
+
+        # 3 Prevent duplicate permission
+        cursor.execute("""
+            SELECT * FROM permissions
+            WHERE agent_id = %s AND action_id = %s;
+        """, (agent_id, data["action_id"]))
+
+        existing_permission = cursor.fetchone()
+
+        if existing_permission:
+            connection.close()
+            return jsonify({"error": "Action already assigned"}), 400
+
+        # 4 Insert permission
         cursor.execute("""
             INSERT INTO permissions (agent_id, action_id)
             VALUES (%s, %s)
             RETURNING *;
         """, (agent_id, data["action_id"]))
 
-        permission = cursor.fetchone()
         connection.commit()
+
+        # 5 Return updated actions list
+        cursor.execute("""
+            SELECT a.*
+            FROM permissions p
+            JOIN actions a ON p.action_id = a.id
+            WHERE p.agent_id = %s;
+        """, (agent_id,))
+
+        actions = cursor.fetchall()
+
         connection.close()
 
-        return jsonify(permission), 201
+        return jsonify({
+            "message": "Action assigned",
+            "actions": actions
+        }), 201
 
     except Exception as error:
         return jsonify({"error": str(error)}), 500
@@ -226,6 +279,20 @@ def remove_action(agent_id, action_id):
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
+        # 1 Check agent exists
+        cursor.execute("SELECT * FROM agents WHERE id = %s;", (agent_id,))
+        agent = cursor.fetchone()
+
+        if not agent:
+            connection.close()
+            return jsonify({"error": "Agent not found"}), 404
+
+        # 2 Check ownership
+        if agent["user_id"] != g.user["id"]:
+            connection.close()
+            return jsonify({"error": "Unauthorized"}), 401
+
+        # 3 Delete permission
         cursor.execute("""
             DELETE FROM permissions
             WHERE agent_id = %s AND action_id = %s
@@ -233,13 +300,16 @@ def remove_action(agent_id, action_id):
         """, (agent_id, action_id))
 
         deleted = cursor.fetchone()
-        connection.commit()
-        connection.close()
 
         if not deleted:
+            connection.close()
             return jsonify({"error": "Permission not found"}), 404
+
+        connection.commit()
+        connection.close()
 
         return jsonify(deleted), 200
 
     except Exception as error:
         return jsonify({"error": str(error)}), 500
+
