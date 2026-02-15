@@ -4,14 +4,15 @@ from auth_middleware import token_required
 import psycopg2.extras
 from datetime import datetime
 
-agents_blueprint = Blueprint('agents_blueprint', __name__)
+agents_blueprint = Blueprint("agents_blueprint", __name__)
 
-# create an agent
-@agents_blueprint.route('/agents', methods=['POST'])
+# CREATE AGENT
+@agents_blueprint.route("/agents", methods=["POST"])
 @token_required
 def create_agent():
     try:
         data = request.get_json()
+
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
@@ -26,17 +27,18 @@ def create_agent():
             datetime.utcnow()
         ))
 
-        created_agent = cursor.fetchone()
+        new_agent = cursor.fetchone()
         connection.commit()
         connection.close()
 
-        return jsonify(created_agent), 201
+        return jsonify(new_agent), 201
 
     except Exception as error:
         return jsonify({"error": str(error)}), 500
-    
-#get all agents
-@agents_blueprint.route('/agents', methods=['GET'])
+
+
+# GET ALL AGENTS (USER ONLY)
+@agents_blueprint.route("/agents", methods=["GET"])
 @token_required
 def agents_index():
     try:
@@ -56,7 +58,9 @@ def agents_index():
     except Exception as error:
         return jsonify({"error": str(error)}), 500
 
-# show one agent
+
+
+# SHOW ONE AGENT
 @agents_blueprint.route('/agents/<agent_id>', methods=['GET'])
 @token_required
 def agents_show(agent_id):
@@ -64,44 +68,178 @@ def agents_show(agent_id):
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
+        # Get agent
         cursor.execute("SELECT * FROM agents WHERE id = %s;", (agent_id,))
         agent = cursor.fetchone()
 
-        connection.close()
-
         if not agent:
+            connection.close()
             return jsonify({"error": "Agent not found"}), 404
 
         if agent["user_id"] != g.user["id"]:
+            connection.close()
             return jsonify({"error": "Unauthorized"}), 401
 
-        return jsonify(agent), 200
+        # Get assigned actions
+        cursor.execute("""
+            SELECT a.*
+            FROM permissions p
+            JOIN actions a ON p.action_id = a.id
+            WHERE p.agent_id = %s;
+        """, (agent_id,))
+
+        actions = cursor.fetchall()
+
+        # Impact summary
+        impact_summary = {
+            "low": 0,
+            "medium": 0,
+            "high": 0,
+            "irreversible": 0
+        }
+
+        for action in actions:
+            impact_summary[action["impact_level"]] += 1
+
+        connection.close()
+
+        return jsonify({
+            "agent": agent,
+            "actions": actions,
+            "impact_summary": impact_summary
+        }), 200
 
     except Exception as error:
         return jsonify({"error": str(error)}), 500
 
-#delete agent
-@agents_blueprint.route('/agents/<agent_id>', methods=['DELETE'])
+
+
+
+# UPDATE AGENT
+@agents_blueprint.route("/agents/<agent_id>", methods=["PUT"])
+@token_required
+def update_agent(agent_id):
+    try:
+        data = request.get_json()
+
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        cursor.execute("""
+            UPDATE agents
+            SET name = %s,
+                description = %s
+            WHERE id = %s AND user_id = %s
+            RETURNING *;
+        """, (
+            data["name"],
+            data.get("description"),
+            agent_id,
+            g.user["id"]
+        ))
+
+        updated = cursor.fetchone()
+        connection.commit()
+        connection.close()
+
+        if not updated:
+            return jsonify({"error": "Agent not found or unauthorized"}), 404
+
+        return jsonify(updated), 200
+
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
+
+
+
+# DELETE AGENT
+@agents_blueprint.route("/agents/<agent_id>", methods=["DELETE"])
 @token_required
 def delete_agent(agent_id):
     try:
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-        cursor.execute("SELECT * FROM agents WHERE id = %s;", (agent_id,))
-        agent = cursor.fetchone()
+        cursor.execute("""
+            DELETE FROM agents
+            WHERE id = %s AND user_id = %s
+            RETURNING *;
+        """, (agent_id, g.user["id"]))
 
-        if not agent:
-            return jsonify({"error": "Agent not found"}), 404
-
-        if agent["user_id"] != g.user["id"]:
-            return jsonify({"error": "Unauthorized"}), 401
-
-        cursor.execute("DELETE FROM agents WHERE id = %s;", (agent_id,))
+        deleted = cursor.fetchone()
         connection.commit()
         connection.close()
 
-        return jsonify(agent), 200
+        if not deleted:
+            return jsonify({"error": "Agent not found or unauthorized"}), 404
+
+        return jsonify(deleted), 200
+
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
+
+
+
+# ASSIGN ACTION TO AGENT
+@agents_blueprint.route("/agents/<agent_id>/actions", methods=["POST"])
+@token_required
+def assign_action(agent_id):
+    try:
+        data = request.get_json()
+
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # verify agent ownership
+        cursor.execute("""
+            SELECT * FROM agents
+            WHERE id = %s AND user_id = %s;
+        """, (agent_id, g.user["id"]))
+
+        agent = cursor.fetchone()
+
+        if not agent:
+            return jsonify({"error": "Agent not found or unauthorized"}), 404
+
+        cursor.execute("""
+            INSERT INTO permissions (agent_id, action_id)
+            VALUES (%s, %s)
+            RETURNING *;
+        """, (agent_id, data["action_id"]))
+
+        permission = cursor.fetchone()
+        connection.commit()
+        connection.close()
+
+        return jsonify(permission), 201
+
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
+
+
+
+# REMOVE ACTION
+@agents_blueprint.route("/agents/<agent_id>/actions/<action_id>", methods=["DELETE"])
+@token_required
+def remove_action(agent_id, action_id):
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        cursor.execute("""
+            DELETE FROM permissions
+            WHERE agent_id = %s AND action_id = %s
+            RETURNING *;
+        """, (agent_id, action_id))
+
+        deleted = cursor.fetchone()
+        connection.commit()
+        connection.close()
+
+        if not deleted:
+            return jsonify({"error": "Permission not found"}), 404
+
+        return jsonify(deleted), 200
 
     except Exception as error:
         return jsonify({"error": str(error)}), 500
