@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, g
+from flask import Blueprint, jsonify, request, g, Response
 from db_helpers import get_db_connection
 from auth_middleware import token_required
 import psycopg2.extras
@@ -340,6 +340,75 @@ def duplicate_agent(agent_id):
 
     except Exception as error:
         return jsonify({"error": str(error)}), 500
+
+# ===============================
+# EXPORT AGENT AUTHORITY
+# ===============================
+
+@agents_blueprint.route("/agents/<agent_id>/export", methods=["GET"])
+@token_required
+def export_agent(agent_id):
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Verify ownership
+        cursor.execute("""
+            SELECT * FROM agents
+            WHERE id = %s AND user_id = %s;
+        """, (agent_id, g.user["id"]))
+
+        agent = cursor.fetchone()
+
+        if not agent:
+            connection.close()
+            return jsonify({"error": "Agent not found or unauthorized"}), 404
+
+        # Get actions
+        cursor.execute("""
+            SELECT a.*
+            FROM permissions p
+            JOIN actions a ON p.action_id = a.id
+            WHERE p.agent_id = %s;
+        """, (agent_id,))
+
+        actions = cursor.fetchall()
+
+        # Get impact + risk score
+        impact_summary = calculate_impact(cursor, agent_id)
+        risk_score = calculate_risk_score(impact_summary)
+
+        connection.close()
+
+        # return jsonify({
+        #     "agent": agent,
+        #     "actions": actions,
+        #     "impact_summary": impact_summary,
+        #     "risk_score": risk_score
+        # }), 200
+        import json
+
+        export_data = {
+            "agent": agent,
+            "actions": actions,
+            "impact_summary": impact_summary,
+            "risk_score": risk_score
+        }
+
+        response = Response(
+            json.dumps(export_data, default=str),
+            mimetype="application/json"
+        )
+
+        response.headers["Content-Disposition"] = "attachment; filename=agent_export.json"
+
+        return response
+
+
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
+
+
 @agents_blueprint.route("/agents/<agent_id>/actions/filter/<level>", methods=["GET"])
 @token_required
 def filter_actions_by_impact(agent_id, level):
