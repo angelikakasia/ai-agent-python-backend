@@ -33,6 +33,22 @@ def calculate_impact(cursor, agent_id):
 
     return summary
 
+# CALCULATE RISK
+
+def calculate_risk_score(impact_summary):
+    weights = {
+        "low": 1,
+        "medium": 3,
+        "high": 6,
+        "irreversible": 10
+    }
+
+    score = 0
+
+    for level, count in impact_summary.items():
+        score += weights[level] * count
+
+    return score
 
 # ===============================
 # CREATE AGENT
@@ -127,14 +143,18 @@ def agents_show(agent_id):
         actions = cursor.fetchall()
 
         impact_summary = calculate_impact(cursor, agent_id)
+        risk_score = calculate_risk_score(impact_summary)
+
 
         connection.close()
 
         return jsonify({
             "agent": agent,
             "actions": actions,
-            "impact_summary": impact_summary
+            "impact_summary": impact_summary,
+            "risk_score": risk_score
         }), 200
+
 
     except Exception as error:
         return jsonify({"error": str(error)}), 500
