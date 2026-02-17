@@ -1,17 +1,17 @@
-# Suzana – Agent Authority Manager (Backend)
+# Agent AI (Backend)
 
-A RESTful API for managing users, AI agents, actions, permissions, and impact analysis for the **Suzana – Agent Authority Manager** application.
+A RESTful API for managing users, AI agents, actions, permissions, and impact analysis for the **Agent AI** application.
 
 Built with Python, Flask, and PostgreSQL.
 
-Suzana’s backend handles authentication, data persistence, authorization, permission management, and automatic impact calculation to help users understand agent authority before execution.
+Agentic AI's backend handles authentication, data persistence, authorization, permission management, and automatic impact calculation to help users understand agent authority before execution.
 
 ---
 
 ## Frontend Repository
 
 The frontend repository for this project can be found here:  
-Frontend: https://your-frontend-link-here.com
+Frontend:[Agentic AI](https://ai-agent-javascript-frontend.vercel.app/) 
 
 ---
 
@@ -92,8 +92,6 @@ Guest users cannot create, edit, or delete data.
 
 ---
 
-## Development Team
-
-This project was built by:
+## This project was built by:
 
 Angelika 
