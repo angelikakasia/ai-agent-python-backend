@@ -14,8 +14,12 @@ from agents import agents_blueprint
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+@app.route("/<path:path>", methods=["OPTIONS"])
+def options_handler(path):
+    return "", 200
+
 app.register_blueprint(agents_blueprint)
-CORS(app, supports_credentials=True)
 
 
 

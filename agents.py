@@ -114,6 +114,26 @@ def agents_index():
     except Exception as error:
         return jsonify({"error": str(error)}), 500
 
+# ======================================
+# GET ALL ACTIONS
+# ======================================
+
+@agents_blueprint.route("/actions", methods=["GET"])
+@token_required
+def actions_index():
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        cursor.execute("SELECT * FROM actions;")
+        actions = cursor.fetchall()
+
+        connection.close()
+
+        return jsonify(actions), 200
+
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
 
 # ======================================
 # SHOW ONE AGENT
