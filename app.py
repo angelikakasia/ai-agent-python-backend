@@ -15,12 +15,13 @@ load_dotenv()
 
 app = Flask(__name__)
 app.register_blueprint(agents_blueprint)
-CORS(app)
+CORS(app, supports_credentials=True)
+
 
 
 @app.route("/")
 def index():
-    return "Hello, world!"
+    return "Hello, Brother, Hello, Sister - yes I am working!"
 
 
 # Encoding JWT token with secret-based signature
