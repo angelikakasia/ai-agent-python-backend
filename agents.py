@@ -296,6 +296,55 @@ def remove_action(agent_id, action_id):
     except Exception as error:
         return jsonify({"error": str(error)}), 500
 
+# ======================================
+# UPDATE AGENT
+# ======================================
+
+@agents_blueprint.route("/agents/<agent_id>", methods=["PUT"])
+@token_required
+def update_agent(agent_id):
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Verify ownership
+        cursor.execute("""
+            SELECT * FROM agents
+            WHERE id = %s AND user_id = %s;
+        """, (agent_id, g.user["id"]))
+
+        agent = cursor.fetchone()
+
+        if not agent:
+            connection.close()
+            return jsonify({"error": "Agent not found or unauthorized"}), 404
+
+        # Update fields
+        cursor.execute("""
+            UPDATE agents
+            SET name = %s,
+                description = %s
+            WHERE id = %s
+            RETURNING *;
+        """, (
+            data.get("name", agent["name"]),
+            data.get("description", agent["description"]),
+            agent_id
+        ))
+
+        updated_agent = cursor.fetchone()
+
+        connection.commit()
+        connection.close()
+
+        return jsonify(updated_agent), 200
+
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
 
 # ======================================
 # EXPORT AGENT
