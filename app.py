@@ -18,20 +18,6 @@ app.register_blueprint(agents_blueprint)
 CORS(app)
 
 
-# def get_db_connection():
-#     connection = psycopg2.connect(
-#         host="localhost",
-#         database="flask_auth_db",
-#         user=os.getenv(
-#             "POSTGRES_USERNAME"
-#         ),  # may not be necessary depending on your postgres setup
-#         password=os.getenv(
-#             "POSTGRES_PASSWORD"
-#         ),  # may not be necessary depending on your postgres setup
-#     )
-#     return connection
-
-
 @app.route("/")
 def index():
     return "Hello, world!"
