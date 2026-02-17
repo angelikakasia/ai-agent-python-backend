@@ -63,6 +63,13 @@ python3 app.py
 
 Guest users cannot create, edit, or delete data.
 
+
+## Future Plan - Next Steps
+- Add threat modeling view (authority path visualization)
+- Implement blast radius simulation
+- Add environment-based permissions (dev / staging / prod)
+- Integrate with cloud IAM for real-world mapping
+- Add a test button - “what-if” permission combinations safely
 ---
 
 ## Data Models
