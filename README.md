@@ -1,3 +1,6 @@
+<img width="715" height="280" alt="Image" src="https://github.com/user-attachments/assets/188944a1-3ac7-4c14-9f11-fcf13225e23e" />
+
+
 # Agent AI (Backend)
 
 A RESTful API for managing users, AI agents, actions, permissions, and impact analysis for the **Agent AI** application.
