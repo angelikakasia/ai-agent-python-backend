@@ -14,7 +14,10 @@ Agentic AI's backend handles authentication, data persistence, authorization, pe
 ## Frontend Repository
 
 The frontend repository for this project can be found here:  
-Frontend:[Agentic AI](https://ai-agent-javascript-frontend.vercel.app/) 
+
+1) Frontend: [GitHub Repository](https://github.com/angelikakasia/ai-agent-javascript-frontend)
+
+2) Frontend Live: [Agentic AI - Vercel](https://ai-agent-javascript-frontend.vercel.app/) 
 
 ---
 
